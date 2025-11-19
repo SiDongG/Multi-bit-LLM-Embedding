@@ -4,6 +4,7 @@ from typing import List, Iterable
 import torch
 import hashlib
 import numpy as np
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 def load_model(model_name="gpt2", device=None):
     """Load model/tokenizer once and reuse."""

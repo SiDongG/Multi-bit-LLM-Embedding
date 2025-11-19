@@ -39,7 +39,7 @@ def generate_watermarked_text(
     bit_len=48,
     k=4,
     num_segments_total=15,
-    prompt="Tuna comes into the lab",
+    prompt="Jen jumps into the water",
 ):
     """
     Generate one watermarked text using your entropy-hash watermark scheme.
@@ -90,7 +90,7 @@ def generate_unwatermarked_text(
     model,
     tokenizer,
     N_tokens=200,
-    prompt="Tuna comes into the lab",
+    prompt="Jen jumps into the water",
 ):
     """
     Generate one unwatermarked (clean) text.

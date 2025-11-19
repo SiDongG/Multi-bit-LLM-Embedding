@@ -107,32 +107,5 @@ def hash_context_with_key(context_tokens, secret_key, modulus):
     h = hashlib.sha256(s.encode()).hexdigest()
     return int(h, 16) % modulus
 
-def assign_segment_from_tokens(
-        model,
-        tokenizer,
-        context_tokens,
-        secret_key,
-        P_X,
-        M=40,
-        ENTROPY_BINS=np.array([1,2,3,4,5,6,7,8,9,10,11, np.inf])
-    ):
-
-    entropy = next_token_entropy(model, tokenizer, context_tokens)
-    bin_index = np.digitize(entropy, ENTROPY_BINS) - 1
-    SEGMENTS_PER_BIN = construct_segments(P_X, M)
-    num_segments = SEGMENTS_PER_BIN[bin_index]
-    segment_index = hash_context_with_key(
-        context_tokens=context_tokens,
-        secret_key=secret_key,
-        modulus=num_segments
-    )
-
-    return entropy, bin_index, segment_index
 
 
-
-# Example usage
-if __name__ == "__main__":
-    results = next_token_entropy("gpt2", "The quick brown fox jumps over the lazy dog", k=5)
-    for ctx, H in results[:10]:
-        print(f"[context: '{ctx[-30:]}'] -> H(next token) = {H:.3f}")

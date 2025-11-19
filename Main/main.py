@@ -9,6 +9,7 @@ import numpy as np
 from watermark import hash_context_with_key, construct_segments, allocate_bits_proportional_to_entropy
 import math
 from itertools import product   
+from ldpc_encoder import LDPCCode, generate_ldpc_H
 
 # ---------------------------
 # Logits processors
@@ -310,8 +311,8 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------
     # EXPERIMENT SETTINGS
     # ---------------------------------------------------------------
-    NUM_RUNS = 5
-    BITSTREAM_LEN = 12    # number of payload bits per run
+    NUM_RUNS = 20
+    BITSTREAM_LEN = 60   # number of payload bits per run
     N = 200               # number of tokens to generate
     k = 3                    # context window
     secret_key = "my_super_secret_key"
@@ -351,7 +352,7 @@ if __name__ == "__main__":
         # -----------------------------
         # 2. Construct segments_per_bin
         # -----------------------------
-        segments_per_bin = construct_segments(P_X, 15)
+        segments_per_bin = construct_segments(P_X, 10)
 
         # -----------------------------
         # 3. Allocate per-segment bit sequences

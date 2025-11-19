@@ -71,6 +71,47 @@ def build_generator_from_H(H):
     return G
 
 
+def generate_ldpc_H(n, rate, dv=3, seed=0):
+    """
+    Generate Gallager LDPC parity-check matrix H (m × n)
+    for desired rate = k/n.
+
+    Args:
+        n   : codeword length
+        rate: desired rate (0 < rate < 1)
+        dv  : variable degree (# of 1's per column), typically 2 or 3
+    Returns:
+        H (numpy array of shape (m, n))
+    """
+    rng = np.random.default_rng(seed)
+
+    # number of parity checks
+    m = int(np.round(n * (1 - rate)))
+
+    # compute dc such that total # of ones matches
+    if (n * dv) % m != 0:
+        raise ValueError("Choose n, rate, dv such that (n * dv) % m == 0")
+
+    dc = (n * dv) // m  # check degree
+    print(f"Generated LDPC with dv={dv}, dc={dc}, rate≈{1-m/n:.3f}")
+
+    # Step 1 — First block (identity-style slices)
+    H = np.zeros((m, n), dtype=np.uint8)
+    rows_per_block = m // dv
+
+    for col in range(n):
+        for b in range(dv):
+            r = (col + b * rows_per_block) % m
+            H[r, col] = 1
+
+    # Step 2 — Random permutation for each additional block
+    for b in range(1, dv):
+        block_rows = np.arange(b * rows_per_block, (b+1) * rows_per_block)
+        perm = rng.permutation(n)
+        H[block_rows] = H[block_rows][:, perm]
+
+    return H
+
 # ==========================================================
 #   LDPC Code Class
 # ==========================================================
@@ -169,9 +210,6 @@ class LDPCCode:
         return hard  # return last estimate
 
 
-# ==========================================================
-# Example small test (only runs if file is executed)
-# ==========================================================
 if __name__ == "__main__":
     # small parity-check example
     H = np.array([
