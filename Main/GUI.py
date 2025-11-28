@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import messagebox
 from transformers import AutoTokenizer, AutoModelForCausalLM, LogitsProcessorList
 from main import MyEntropyHashWatermarkLogitsProcessor, NoWatermarkLogitsProcessor
-from watermark import (
+from Main.watermarkutils import (
     construct_segments,
     allocate_bits_proportional_to_entropy,
 )
