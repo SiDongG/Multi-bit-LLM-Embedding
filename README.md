@@ -12,7 +12,7 @@ Preliminary Achievable Scheme for CS8803: MLS
 
 ## Installation
 ```bash
-git clone https://github.com/yourusername/covert-llm-embedding
-cd covert-llm-embedding
+git clone https://github.com/SiDongG/Multi-bit-LLM-Embedding
+cd Multi-bit-LLM-Embedding
 pip install -r requirements.txt
 
