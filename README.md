@@ -1,31 +1,18 @@
-covert-llm-embedding/
-│
-├── src/
-│   ├── embedding/          # embedding algorithms (green-list, entropy-based, resolvability)
-│   ├── decoding/           # decoders (hard/soft, OSD-like, MAP, sequential)
-│   ├── stats/              # KL, chi-square, Chernoff, entropy analyzers
-│   ├── llm/                # interfaces to HuggingFace models
-│   ├── utils/              # helpers and shared utilities
-│   └── evaluation/         # simulation experiments, benchmarking scripts
-│
-├── experiments/
-│   ├── square_root_law/    # rate scaling experiments
-│   ├── robustness/         # editing, paraphrasing, filtering robustness
-│   ├── segmentation/       # entropy-segmentation results
-│   └── watermarking/       # baselines (e.g., Kirchenbauer, Qu et al.)
-│
-├── data/
-│   ├── prompts/
-│   ├── corpora/
-│   └── cached_models/
-│
-├── results/
-│   ├── figures/
-│   ├── logs/
-│   └── processed/
-│
-├── slurm/
-│   ├── run_experiment.sbatch
-│   └── analysis_job.sbatch
-│
-└── README.md
+# Covert LLM Embedding: A Resolvability Perspective
+
+Preliminary Achievable Scheme for CS8803: MLS
+
+## Features
+- Covert multi-bit embedding in LLM outputs  
+- Entropy-based and segmentation-based embedding  (Context window hashing and soft logits biasing 
+- Resolvability-based distribution matching  
+- Robust decoding under editing, paraphrasing, and noise  (RS over GF(256) and 1st order OSD)
+- Statistical detection tools (KL, chi-square)  
+- Experiment and evaluation pipelines  
+
+## Installation
+```bash
+git clone https://github.com/yourusername/covert-llm-embedding
+cd covert-llm-embedding
+pip install -r requirements.txt
+
