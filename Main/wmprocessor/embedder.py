@@ -19,7 +19,7 @@ def _compute_entropy_bits_from_logits(logits: torch.Tensor) -> float:
     logits: [vocab]
     """
     probs = F.softmax(logits, dim=-1)
-    log_probs = F.log_softmax(logits, dim=-1)  # natural log
+    log_probs = F.log_softmax(logits, dim=-1) 
     entropy_nats = -(probs * log_probs).sum().item()
     entropy_bits = entropy_nats / np.log(2.0)
     return entropy_bits
@@ -30,7 +30,7 @@ class NoWatermarkLogitsProcessor(LogitsProcessor):
     This reproduces the behavior of the original LLM with no watermark.
     """
     def __call__(self, input_ids, scores):
-        return scores  # unchanged
+        return scores 
     
 
 class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
@@ -42,7 +42,7 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
         segment_bits,
         k,
         model,
-        model_type="auto",     # <-- auto-detects GPT2 vs LLaMA
+        model_type="auto",    
         bias=6.0,
         entropy_bins=None,
     ):
@@ -55,7 +55,6 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
         self.bias = bias
         self.model = model
 
-        # ---------------------- MODEL TYPE HANDLING ----------------------
         if model_type == "auto":
             name = model.__class__.__name__.lower()
             if "llama" in name:
@@ -80,7 +79,6 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
         self.num_steps = 0
 
 
-    # ----------------------------------------------------------------------
     def _compute_entropy_bits(self, logits):
         probs = F.softmax(logits, dim=-1)
         log_probs = F.log_softmax(logits, dim=-1)
@@ -88,7 +86,6 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
         return H / np.log(2)
 
 
-    # ----------------------------------------------------------------------
     def __call__(self, input_ids, scores):
 
         # -------------------- shape unwrap ------------------------
@@ -98,9 +95,8 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
             logits = scores
 
         # -------------------- 1. build entropy context -------------------
-        raw_ctx = input_ids[0][-self.k:]  # shape [k]
+        raw_ctx = input_ids[0][-self.k:]  
 
-        # LLaMA requires BOS token at the beginning of any standalone forward pass
         if self.model_type == "llama":
             bos_id = self.tokenizer.bos_token_id
             if bos_id is not None:
@@ -111,10 +107,9 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
             else:
                 entropy_ctx = raw_ctx
         else:
-            # GPT-2 or others: no BOS
             entropy_ctx = raw_ctx
 
-        entropy_ctx = entropy_ctx.unsqueeze(0)  # [1, seq_len]
+        entropy_ctx = entropy_ctx.unsqueeze(0) 
 
         # -------------------- 2. compute entropy ------------------------
         with torch.no_grad():
@@ -162,7 +157,6 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
         q = F.softmax(biased, dim=-1)
         kl = (p_detached * (p_detached.log() - q.log())).sum().item()
 
-        # record stats
         self.total_kl += kl
         self.num_steps += 1
 

@@ -111,7 +111,7 @@ def run_single_experiment(
 
         # Tokenize the essay
         encoded = tokenizer(sample["essays"], add_special_tokens=False)
-        prompt_tokens = encoded["input_ids"][:100]      # take the first 100 tokens
+        prompt_tokens = encoded["input_ids"][:100]      
         prompt = tokenizer.decode(prompt_tokens)
 
         # print("Prompt (tokens=100):", prompt, "...")
@@ -135,7 +135,7 @@ def run_single_experiment(
         out = model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            max_new_tokens=N,            # ONLY extension beyond prompt
+            max_new_tokens=N,           
             logits_processor=processors,
             do_sample=True,
             top_p=0.9,
@@ -205,8 +205,8 @@ def run_single_experiment(
         "decoded_bits": decoded_bits,
         "segment_stats": segment_stats,
         "prompt": prompt,
-        "generated_text": continuation_text,  # continuation only
-        "full_text": generated_text,          # prompt + continuation
+        "generated_text": continuation_text,  
+        "full_text": generated_text,        
         "edited_text": edited_text,
     }
 

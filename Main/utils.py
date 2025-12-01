@@ -49,10 +49,8 @@ def select_green_list(secret_key, bit_seq, prev_tokens, vocab_size):
     the 2^k different bit patterns index disjoint slices of a *single*
     permuted vocabulary, giving a true partition.
     """
-    # Ensure tokens list is stringified
     prev_tokens_str = "_".join(str(t) for t in prev_tokens)
 
-    # --- Setup ---
     secret_key = str(secret_key)
     k = len(bit_seq)
     num_buckets = 2**k
@@ -73,7 +71,6 @@ def select_green_list(secret_key, bit_seq, prev_tokens, vocab_size):
 
     end = start + bucket_size
 
-    # --- IMPORTANT: seed does NOT depend on bit_seq ---
     seed_string = f"{secret_key}|{prev_tokens_str}"
     rng = deterministic_rng(seed_string)
 
@@ -81,7 +78,6 @@ def select_green_list(secret_key, bit_seq, prev_tokens, vocab_size):
     perm = np.arange(vocab_size)
     rng.shuffle(perm)
 
-    # --- Return this bucket's slice ---
     green_list = perm[start:end]
     return green_list.tolist()
 
@@ -124,7 +120,6 @@ def apply_random_edits(
         # 2. Random DELETE
         # ------------------------
         if random.random() < p_del:
-            # skip adding current token → deletion
             continue
 
         # ------------------------
@@ -148,7 +143,6 @@ def compact_json_arrays(json_str):
     while i < len(lines):
         line = lines[i]
         
-        # Check if this line starts an array (ends with just "[")
         if re.match(r'\s+"[^"]+":\s*\[\s*$', line):
             indent_match = re.match(r'(\s+)"([^"]+)":\s*\[\s*$', line)
             if indent_match:
@@ -176,7 +170,6 @@ def compact_json_arrays(json_str):
                     
                     # Check if this is an object (not a simple array element)
                     if stripped.startswith('{'):
-                        # Abort - this array contains objects, don't compact
                         result.append(line)
                         i -= 1
                         break

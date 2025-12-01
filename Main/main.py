@@ -37,15 +37,8 @@ import json, os
 import re
 from datasets import load_dataset
 
-# =================================================================
-# Main Experiment Function
-# =================================================================
-# =================================================================
 def main():
 
-    # ---------------------------------------------------------------
-    # ARGUMENT PARSER
-    # ---------------------------------------------------------------
     parser = argparse.ArgumentParser(description="LLM Multi-bit Embedding Experiment")
 
     parser.add_argument("--runs", type=int, default=1,
@@ -75,16 +68,13 @@ def main():
                         help="Watermark bias parameter")
     args = parser.parse_args()
 
-
-    # ---------------------------------------------------------------
     # CONFIGURATION
-    # ---------------------------------------------------------------
     NUM_RUNS = args.runs
-    BITSTREAM_LEN = args.bits          # raw bits, not RS-coded yet
+    BITSTREAM_LEN = args.bits          
     N = args.tokens
     k = args.k
-    n = args.n                          # RS code length
-    k_rs = args.k_rs                    # RS message length
+    n = args.n                         
+    k_rs = args.k_rs                    
     model_name = args.model
     secret_key = "my_super_secret_key"
 
@@ -122,7 +112,6 @@ def main():
         token=True
     )
 
-    # Fix missing pad token for LLaMA
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -234,7 +223,6 @@ def main():
     # ---------------------------
     for i, r in enumerate(all_results):
 
-        # per-run bit accuracy
         correct_bits = sum(int(a == b) for a, b in zip(r["bitstream"], r["decoded_bits"]))
         bit_acc = correct_bits / BITSTREAM_LEN
 
@@ -248,10 +236,8 @@ def main():
             "encoded_bits": r["encoded_bits"].tolist(),
             "decoded_bits": r["decoded_bits"].tolist(),
 
-            # extracted bits is a string → convert safely
             "extracted_bits": [int(x) for x in r["extracted_bits"]],
 
-            # segment stats converted to JSON-safe types
             "segment_stats": convert_segment_stats_for_json(r["segment_stats"]),
 
             "prompt": r["prompt"],                            
@@ -265,7 +251,6 @@ def main():
     # ---------------------------
     with open("results/results.json", "w") as f:
         json_str = json.dumps(output, indent=4)
-        # Compact arrays to single lines
         json_str = compact_json_arrays(json_str)
         f.write(json_str)
 
@@ -274,9 +259,6 @@ def main():
 
 
 
-# =================================================================
-# ENTRY POINT
-# =================================================================
 if __name__ == "__main__":
     main()
 

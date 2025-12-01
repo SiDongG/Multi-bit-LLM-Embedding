@@ -46,19 +46,10 @@ def decode_watermark_bits(
           * if token is in that green_list, increment count[b,s,c]
       - at the end, choose argmax_c count[b,s,c] as decoded bits for segment (b,s)
 
-    Returns:
-        recovered_stream: global decoded bitstream (str)
-        segment_stats: dict[(bin_idx, seg_idx)] -> {
-             'L': int,
-             'trials': int,
-             'counts': dict[bit_pattern_str] -> int,
-             'best_bits': str
-        }
-        debug_info: optional per-position info
     """
 
     if generated_ids.dim() == 2:
-        generated_ids = generated_ids[0]  # [seq_len]
+        generated_ids = generated_ids[0] 
 
     device = next(model.parameters()).device
     vocab_size = tokenizer.vocab_size
@@ -69,7 +60,7 @@ def decode_watermark_bits(
     # 0. Precompute candidate sets per segment
     # ---------------------------
     segment_stats = {}
-    # segment_bits gives us the DESIGN length for each segment (b,s)
+
     for (bin_idx, seg_idx), bit_seq in segment_bits.items():
         L = len(bit_seq)
         if L == 0:
@@ -127,7 +118,7 @@ def decode_watermark_bits(
         seg_idx = hash_context_with_key(context_tokens, secret_key, num_seg_bin)
         seg_key = (bin_idx, seg_idx)
 
-        # This segment might have L=0 or might not exist if no bits allocated
+        # might have L=0 
         if seg_key not in segment_stats:
             debug_info.append({
                 "pos": t,

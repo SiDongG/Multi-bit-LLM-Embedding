@@ -4,7 +4,7 @@ import itertools
 
 
 # ================================================================
-# RS CODEC INITIALIZATION (now dynamic)
+# RS CODEC INITIALIZATION 
 # ================================================================
 def init_rs_codec(n, k):
     """
@@ -13,12 +13,12 @@ def init_rs_codec(n, k):
     """
     parity = n - k
     rs = reedsolo.RSCodec(parity)
-    t = parity // 2     # correctable symbol errors
+    t = parity // 2    
     return rs, parity, t
 
 
 # ================================================================
-# RELIABILITY COMPUTATION (dynamic bit-lengths + symbol count)
+# RELIABILITY COMPUTATION 
 # ================================================================
 def compute_symbol_reliability(segment_bits, n, k):
     """
@@ -75,7 +75,7 @@ def get_symbol_candidates_from_stats(segment_stats, symbol_index, bits_per_symbo
         return []
 
     # Identify which segments overlap this symbol
-    contributing = []   # (seg_id, local_start, take_len)
+    contributing = []  
     current_bitpos = 0
 
     for seg_id, info in segment_stats.items():
@@ -232,7 +232,7 @@ def rs_decode_bits(received_bits, segment_bits, segment_stats, n, k, rs, K=2, L=
     return np.unpackbits(np.frombuffer(decoded_bytes, dtype=np.uint8))
  
 # ================================================================
-# DEMO
+# DEMO (test code for RS-OSD)
 # ================================================================
 if __name__ == "__main__":
 
@@ -247,7 +247,7 @@ if __name__ == "__main__":
 
     # ----------- 3. Inject BIT errors -----------------------------
     noisy = code_bits.copy()
-    flip_positions = [16, 17, 18]      # try staying inside one symbol region
+    flip_positions = [16, 17, 18]      
     for p in flip_positions:
         noisy[p] ^= 1
 

@@ -10,25 +10,7 @@ from Main.watermarkutils import (
     allocate_bits_proportional_to_entropy,
 )
 
-# =====================================================
-# 1. IMPORT / DEFINE YOUR EXISTING FUNCTIONS & CLASSES
-# =====================================================
-# You should already have these in your project. Either:
-# - from your_module import construct_segments, allocate_bits_proportional_to_entropy,
-#   MyEntropyHashWatermarkLogitsProcessor, NoWatermarkLogitsProcessor
-# or define them above this script.
 
-# Placeholder comments:
-# from your_watermark_module import (
-#     construct_segments,
-#     allocate_bits_proportional_to_entropy,
-#     MyEntropyHashWatermarkLogitsProcessor,
-#     NoWatermarkLogitsProcessor,
-# )
-
-# =====================================================
-# 2. GENERATION HELPERS
-# =====================================================
 
 def generate_watermarked_text(
     model,
@@ -96,7 +78,7 @@ def generate_unwatermarked_text(
     Generate one unwatermarked (clean) text.
     You can either use a dummy NoWatermarkLogitsProcessor or no processor at all.
     """
-    # If you have a NoWatermarkLogitsProcessor that just passes scores through:
+
     try:
         no_wm_processor = NoWatermarkLogitsProcessor()
         processors = LogitsProcessorList([no_wm_processor])
@@ -198,7 +180,7 @@ class WatermarkTuringTestGUI:
         if self.index < len(self.items):
             self.show_current_item()
         else:
-            self.show_current_item()  # show final "finished" message
+            self.show_current_item() 
 
     def show_results(self):
         # Compute accuracy and confusion matrix
@@ -245,7 +227,6 @@ def main():
     secret_key = "my_super_secret_key"
     model_name = "gpt2"
 
-    # Example P_X from your previous code
     P_X = np.array([
         0.042, 0.02, 0.024, 0.04, 0.07,
         0.121, 0.139, 0.144, 0.14, 0.12, 0.068, 0.072
