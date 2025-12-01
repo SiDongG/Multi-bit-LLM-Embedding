@@ -42,6 +42,7 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
         segment_bits,
         k,
         model,
+        model_type="auto",     # <-- auto-detects GPT2 vs LLaMA
         bias=6.0,
         entropy_bins=None,
     ):
@@ -54,62 +55,93 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
         self.bias = bias
         self.model = model
 
+        # ---------------------- MODEL TYPE HANDLING ----------------------
+        if model_type == "auto":
+            name = model.__class__.__name__.lower()
+            if "llama" in name:
+                self.model_type = "llama"
+            elif "gpt" in name:
+                self.model_type = "gpt2"
+            else:
+                self.model_type = "other"
+        else:
+            self.model_type = model_type.lower()
+
+        # ---------------------- ENTROPY BINS ----------------------------
         if entropy_bins is None:
             self.entropy_bins = np.array([1,2,3,4,5,6,7,8,9,10,11, np.inf])
         else:
             self.entropy_bins = entropy_bins
 
-        assert len(self.segments_per_bin) == len(self.entropy_bins)-1
+        assert len(self.segments_per_bin) == len(self.entropy_bins) - 1
 
-        # --- KL tracking ---
+        # ---------------------- KL STATS --------------------------------
         self.total_kl = 0.0
         self.num_steps = 0
 
+
+    # ----------------------------------------------------------------------
     def _compute_entropy_bits(self, logits):
         probs = F.softmax(logits, dim=-1)
         log_probs = F.log_softmax(logits, dim=-1)
         H = -(probs * log_probs).sum().item()
         return H / np.log(2)
 
+
+    # ----------------------------------------------------------------------
     def __call__(self, input_ids, scores):
 
-        # ------------ shape handling -------------
+        # -------------------- shape unwrap ------------------------
         if scores.dim() == 2:
             logits = scores[0]
         else:
             logits = scores
 
-        # ------------ 1. entropy -----------------
-        # --- 1. entropy logits (using only last-k)
-        entropy_ctx = input_ids[0][-self.k:].unsqueeze(0)
+        # -------------------- 1. build entropy context -------------------
+        raw_ctx = input_ids[0][-self.k:]  # shape [k]
 
+        # LLaMA requires BOS token at the beginning of any standalone forward pass
+        if self.model_type == "llama":
+            bos_id = self.tokenizer.bos_token_id
+            if bos_id is not None:
+                entropy_ctx = torch.cat([
+                    torch.tensor([bos_id], device=raw_ctx.device),
+                    raw_ctx
+                ])
+            else:
+                entropy_ctx = raw_ctx
+        else:
+            # GPT-2 or others: no BOS
+            entropy_ctx = raw_ctx
+
+        entropy_ctx = entropy_ctx.unsqueeze(0)  # [1, seq_len]
+
+        # -------------------- 2. compute entropy ------------------------
         with torch.no_grad():
             entropy_logits = self.model(entropy_ctx).logits[0, -1, :]
 
-        H_bits = _compute_entropy_bits_from_logits(entropy_logits)
+        H_bits = self._compute_entropy_bits(entropy_logits)
 
-
-        # ------------ 2. bin ----------------------
+        # -------------------- 3. map to entropy bin ---------------------
         bin_idx = int(np.digitize(H_bits, self.entropy_bins) - 1)
-        bin_idx = max(0, min(bin_idx, len(self.segments_per_bin)-1))
+        bin_idx = max(0, min(bin_idx, len(self.segments_per_bin) - 1))
 
         if self.segments_per_bin[bin_idx] <= 0:
             return scores
 
-        # ------------ 3. context ------------------
-        ctx = input_ids[0].tolist()
-        context_tokens = ctx[-self.k:] if len(ctx) >= self.k else ctx
+        # -------------------- 4. segment index --------------------------
+        ctx_list = input_ids[0].tolist()
+        context_tokens = ctx_list[-self.k:] if len(ctx_list) >= self.k else ctx_list
 
-        # ------------ 4. segment index ------------
         num_seg = self.segments_per_bin[bin_idx]
         seg_idx = hash_context_with_key(context_tokens, self.secret_key, num_seg)
 
-        # ------------ 5. bit sequence -------------
+        # -------------------- 5. bit sequence ---------------------------
         bit_seq = self.segment_bits.get((bin_idx, seg_idx), "")
         if len(bit_seq) == 0:
             return scores
 
-        # ------------ 6. green list ---------------
+        # -------------------- 6. compute greenlist ----------------------
         green_ids = select_green_list(
             secret_key=self.secret_key,
             bit_seq=bit_seq,
@@ -118,27 +150,26 @@ class MyEntropyHashWatermarkLogitsProcessor(LogitsProcessor):
         )
         green_ids = torch.tensor(green_ids, dtype=torch.long, device=logits.device)
 
-        # ------------ 7. KL tracking BEFORE bias ---
+        # -------------------- 7. KL BEFORE bias -------------------------
         p = F.softmax(logits, dim=-1)
-        # copy so later modification doesn't affect p
         p_detached = p.detach()
 
-        # ------------ 8. apply bias ---------------
+        # -------------------- 8. apply watermark bias -------------------
         biased = logits.clone()
         biased[green_ids] += self.bias
 
-        # ------------ 9. KL(p || q) AFTER bias ----
+        # -------------------- 9. KL AFTER bias --------------------------
         q = F.softmax(biased, dim=-1)
         kl = (p_detached * (p_detached.log() - q.log())).sum().item()
 
-        # record
+        # record stats
         self.total_kl += kl
         self.num_steps += 1
 
-        # ------------ 10. return correct shape ----
+        # -------------------- 10. return correct shape ------------------
         if scores.dim() == 2:
-            new_scores = scores.clone()
-            new_scores[0] = biased
-            return new_scores
+            out = scores.clone()
+            out[0] = biased
+            return out
         else:
             return biased

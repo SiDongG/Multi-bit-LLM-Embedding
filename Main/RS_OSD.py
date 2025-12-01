@@ -230,7 +230,7 @@ def rs_decode_bits(received_bits, segment_bits, segment_stats, n, k, rs, K=2, L=
         return received_bits[:k * 8]  # fail-safe
 
     return np.unpackbits(np.frombuffer(decoded_bytes, dtype=np.uint8))
-
+ 
 # ================================================================
 # DEMO
 # ================================================================

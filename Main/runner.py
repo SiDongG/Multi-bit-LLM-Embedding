@@ -38,6 +38,7 @@ def run_single_experiment(
     seg_count,
     tokenizer,
     model,
+    model_name,
     secret_key,
     k,
     N,
@@ -46,7 +47,8 @@ def run_single_experiment(
     k_rs,
     edit_prob,
     dataset,
-    essay_dataset
+    essay_dataset,
+    bias
 ):
     """
     Runs one full watermarking + RS coding experiment.
@@ -88,6 +90,9 @@ def run_single_experiment(
         segment_bits=segment_bits,
         k=k,
         model=model,
+        model_type=model_name,
+        bias=bias,
+        entropy_bins=None,
     )
     processors = LogitsProcessorList([wm_processor])
 
@@ -101,31 +106,36 @@ def run_single_experiment(
         if essay_dataset is None:
             raise ValueError("Dataset mode is 'essay' but no dataset was passed.")
 
-        idx = int(rng.integers(0, len(essay_dataset)))  # convert to Python int
+        idx = int(rng.integers(0, len(essay_dataset)))
         sample = essay_dataset[idx]
 
-        # essays-with-instructions dataset uses key "essays"
-        prompt = sample["essays"][:200]
+        # Tokenize the essay
+        encoded = tokenizer(sample["essays"], add_special_tokens=False)
+        prompt_tokens = encoded["input_ids"][:100]      # take the first 100 tokens
+        prompt = tokenizer.decode(prompt_tokens)
 
+        # print("Prompt (tokens=100):", prompt, "...")
     else:
         prompt = "He walks into the room"
 
-    # Tokenize prompt
+
     encoding = tokenizer(
         prompt,
         return_tensors="pt",
         truncation=True,
-        max_length=200,
+        max_length=100,
     )
     input_ids = encoding["input_ids"]
     attention_mask = encoding["attention_mask"]
 
-
+    # -----------------------------
+    # 7. Generate CONTINUATION ONLY
+    # -----------------------------
     with torch.no_grad():
         out = model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            max_new_tokens=N,
+            max_new_tokens=N,            # ONLY extension beyond prompt
             logits_processor=processors,
             do_sample=True,
             top_p=0.9,
@@ -133,8 +143,12 @@ def run_single_experiment(
         )
 
     generated_ids = out[0]
-    generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
-    print("Generated text (truncated):", generated_text[:80], "...")
+
+    # full text (prompt + continuation)
+    generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)  
+    continuation_ids = generated_ids[len(input_ids[0]):]
+    continuation_text = tokenizer.decode(continuation_ids, skip_special_tokens=True)
+    # print("Generated text (truncated):", generated_text, "...")
 
     if wm_processor.num_steps > 0:
         print(f"Average KL divergence per token: {wm_processor.total_kl / wm_processor.num_steps:.6f}")
@@ -152,7 +166,7 @@ def run_single_experiment(
         p_sub=edit_prob,
     )
     edited_text = tokenizer.decode(edited_ids, skip_special_tokens=True)
-    print("Edited text (truncated):", edited_text[:80], "...")
+    # print("Edited text (truncated):", edited_text, "...")
 
     # -------------------------
     # 8. Decode watermark
@@ -186,11 +200,16 @@ def run_single_experiment(
     return {
         "success": success,
         "bitstream": bitstream,
+        "encoded_bits": code_bits,
+        "extracted_bits": recovered_bits,
         "decoded_bits": decoded_bits,
         "segment_stats": segment_stats,
-        "generated_text": generated_text,
+        "prompt": prompt,
+        "generated_text": continuation_text,  # continuation only
+        "full_text": generated_text,          # prompt + continuation
         "edited_text": edited_text,
     }
+
 
 
 

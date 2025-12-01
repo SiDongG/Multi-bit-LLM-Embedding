@@ -5,6 +5,11 @@ import torch
 import hashlib
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForCausalLM
+import itertools
+import math
+import json, os
+import re
+from datasets import load_dataset
 
 def load_model(model_name="gpt2", device=None):
     """Load model/tokenizer once and reuse."""
@@ -134,128 +139,96 @@ def apply_random_edits(
     return torch.tensor(edited, dtype=torch.long)
 
 
-# ---------------------------
-# Example usage (skeleton)
-# ---------------------------
-# if __name__ == "__main__":
-#     import numpy as np
-#     import torch
-#     from transformers import AutoTokenizer, AutoModelForCausalLM, LogitsProcessorList
+def compact_json_arrays(json_str):
+    """Post-process JSON string to put array elements on the same line."""
+    lines = json_str.split('\n')
+    result = []
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
+        
+        # Check if this line starts an array (ends with just "[")
+        if re.match(r'\s+"[^"]+":\s*\[\s*$', line):
+            indent_match = re.match(r'(\s+)"([^"]+)":\s*\[\s*$', line)
+            if indent_match:
+                indent = indent_match.group(1)
+                key = indent_match.group(2)
+                
+                # Collect array elements
+                elements = []
+                i += 1
+                array_closed = False
+                trailing_comma = False
+                
+                while i < len(lines):
+                    elem_line = lines[i]
+                    stripped = elem_line.strip()
+                    
+                    # Check for closing bracket
+                    if stripped == ']':
+                        array_closed = True
+                        break
+                    elif stripped == '],':
+                        array_closed = True
+                        trailing_comma = True
+                        break
+                    
+                    # Check if this is an object (not a simple array element)
+                    if stripped.startswith('{'):
+                        # Abort - this array contains objects, don't compact
+                        result.append(line)
+                        i -= 1
+                        break
+                    
+                    # Extract element value
+                    if stripped:
+                        elem_value = stripped.rstrip(',').strip()
+                        # Only process if it looks like a simple value (number, boolean, or quoted string)
+                        if elem_value and (elem_value.replace('-', '').replace('.', '').isdigit() or 
+                                         elem_value in ['true', 'false', 'null'] or
+                                         (elem_value.startswith('"') and elem_value.endswith('"'))):
+                            elements.append(elem_value)
+                    
+                    i += 1
+                
+                if array_closed:
+                    # Successfully compacted the array
+                    if elements:
+                        compact = f'{indent}"{key}": [{", ".join(elements)}]'
+                    else:
+                        compact = f'{indent}"{key}": []'
+                    if trailing_comma:
+                        compact += ','
+                    result.append(compact)
+                    i += 1
+                    continue
+        
+        result.append(line)
+        i += 1
+    
+    return '\n'.join(result)
 
-#     # ---------------------------------------------------------------
-#     # 1. SETTINGS
-#     # ---------------------------------------------------------------
-#     entropy_bins = np.array(["[0,1)", "[1,2)", "[2,3)", "[3,4)", "[4,5)", "[5,6)", "[6,7)",
-#                              "[7,8)", "[8,9)", "[9,10)", "[10,11)", "[11,12)", "[12,∞)"])
-
-#     # Your P_X distribution
-#     P_X = np.array([0.042, 0.02, 0.024, 0.04, 0.07,
-#                     0.121, 0.139, 0.144, 0.14, 0.12, 0.068, 0.072])
-
-#     model_name = "gpt2"
-#     N = 200             # tokens to generate
-#     M = np.round(N)
-
-#     # Construct number of segments in each entropy bin
-#     segments_per_bin = construct_segments(P_X, 15)
-
-#     # Payload bits
-#     bitstream = "100110111001010010100110101011110101010"
-
-#     # Allocate per-segment bit subsequences
-#     segment_bits = allocate_bits_proportional_to_entropy(
-#         segments_per_bin,
-#         bitstream
-#     )
-
-#     # ---------------------------------------------------------------
-#     # 2. LOAD MODEL
-#     # ---------------------------------------------------------------
-#     tokenizer = AutoTokenizer.from_pretrained(model_name)
-#     model = AutoModelForCausalLM.from_pretrained(model_name)
-#     model.eval()
-
-#     secret_key = "my_super_secret_key"
-#     k = 4  # context window size
-
-#     # ---------------------------------------------------------------
-#     # 3. BUILD WATERMARK PROCESSOR
-#     # ---------------------------------------------------------------
-#     wm_processor = MyEntropyHashWatermarkLogitsProcessor(
-#         tokenizer=tokenizer,
-#         secret_key=secret_key,
-#         segments_per_bin=segments_per_bin,
-#         segment_bits=segment_bits,
-#         k=k,
-#     )
-
-#     processors = LogitsProcessorList([wm_processor])
-
-#     # ---------------------------------------------------------------
-#     # 4. GENERATE WATERMARKED TEXT
-#     # ---------------------------------------------------------------
-#     prompt = "He walks into the room"
-#     input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"]
-
-#     with torch.no_grad():
-#         out = model.generate(
-#             input_ids=input_ids,
-#             max_new_tokens=N,
-#             logits_processor=processors,
-#             do_sample=True,   # use sampling so green-list bias works
-#             top_p=0.9,
-#             temperature=1.0
-#         )
-
-#     generated_ids = out[0]
-
-#     generated_text = tokenizer.decode(out[0], skip_special_tokens=True)
-#     print("\n==================== WATERMARKED TEXT ====================")
-#     print(generated_text)
-
-#     # ---------------------------------------------------------------
-#     # GENERATE UNWATERMARKED (ORIGINAL) TEXT
-#     # ---------------------------------------------------------------
-
-#     no_wm_processor = NoWatermarkLogitsProcessor()
-#     processors_none = LogitsProcessorList([no_wm_processor])
-
-#     with torch.no_grad():
-#         out_clean = model.generate(
-#             input_ids=input_ids,
-#             max_new_tokens=N,
-#             logits_processor=processors_none,   # <--- no watermark processor
-#             do_sample=True,                     # sampling, same as watermarked version
-#             top_p=0.9,
-#             temperature=1.0,
-#         )
-
-#     clean_text = tokenizer.decode(out_clean[0], skip_special_tokens=True)
-
-#     print("\n==================== UNWATERMARKED TEXT ====================")
-#     print(clean_text)
-
-#     # ---------------------------------------------------------------
-#     # 5. DECODE WATERMARK BITS
-#     # ---------------------------------------------------------------
-#     recovered_bits, segment_stats, debug_info = decode_watermark_bits(
-#         model=model,
-#         tokenizer=tokenizer,
-#         generated_ids=generated_ids,
-#         secret_key=secret_key,
-#         segments_per_bin=segments_per_bin,
-#         segment_bits=segment_bits,
-#         k=k,
-#     )
+def numpy_to_python(obj):
+    if isinstance(obj, (np.bool_, np.bool_)):
+        return bool(obj)
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    return obj
 
 
-#     print("\n==================== DECODED BITSTREAM ====================")
-#     print(recovered_bits)
-
-#     print("\n==================== ORIGINAL BITSTREAM ====================")
-#     print(bitstream)
-
-#     # Optional: print first few debug steps
-#     print("\n==================== DEBUG INFO (first 10 steps) ====================")
-#     for d in debug_info[:10]:
-#         print(d)
+def convert_segment_stats_for_json(segment_stats):
+    """
+    Converts tuple keys into string keys so that JSON can serialize them.
+    Example: (5,0) -> "5,0"
+    """
+    new_dict = {}
+    for key, value in segment_stats.items():
+        if isinstance(key, tuple):
+            new_key = ",".join(str(k) for k in key)
+        else:
+            new_key = str(key)
+        new_dict[new_key] = value
+    return new_dict

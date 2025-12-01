@@ -11,7 +11,13 @@ from transformers import (
     AutoModelForCausalLM,
     LogitsProcessorList,
 )
-from utils import select_green_list, apply_random_edits
+from utils import (
+    select_green_list,
+    apply_random_edits, 
+    compact_json_arrays, 
+    numpy_to_python, 
+    convert_segment_stats_for_json
+)
 import numpy as np
 from watermarkutils import (
     hash_context_with_key,
@@ -28,32 +34,8 @@ import itertools
 import math
 from runner import run_single_experiment
 import json, os
+import re
 from datasets import load_dataset
-
-def numpy_to_python(obj):
-    if isinstance(obj, (np.bool_, np.bool_)):
-        return bool(obj)
-    if isinstance(obj, (np.integer,)):
-        return int(obj)
-    if isinstance(obj, (np.floating,)):
-        return float(obj)
-    return obj
-
-
-def convert_segment_stats_for_json(segment_stats):
-    """
-    Converts tuple keys into string keys so that JSON can serialize them.
-    Example: (5,0) -> "5,0"
-    """
-    new_dict = {}
-    for key, value in segment_stats.items():
-        if isinstance(key, tuple):
-            new_key = ",".join(str(k) for k in key)
-        else:
-            new_key = str(key)
-        new_dict[new_key] = value
-    return new_dict
-
 
 # =================================================================
 # Main Experiment Function
@@ -77,18 +59,20 @@ def main():
     parser.add_argument("--seg", type=int, default=10,
                         help="Total number of segments")
     parser.add_argument("--model", type=str, default="gpt2",
-                        help="Model name")
+                        help="Model name: gpt2, llama-3.1b")
     parser.add_argument("--seed", type=int, default=1,
                         help="Random seed")
     parser.add_argument("--n", type=int, default=5,
                         help="RS(n,k) total number of symbols (bytes)")
     parser.add_argument("--k_rs", type=int, default=3,
                         help="RS(n,k) message symbol count (bytes)")
-    parser.add_argument("--edit", type=float, default=0.07,
+    parser.add_argument("--edit", type=float, default=0,
                         help="Edit probability for insertion/deletion/substitution")
-    parser.add_argument("--dataset", type=str, default="none",
+    parser.add_argument("--dataset", type=str, default="essay",
                     choices=["none", "essay"],
                     help="Source of prompts: 'none' uses fixed prompt; 'essay' loads essay dataset")
+    parser.add_argument("--bias", type=float, default=6.0,
+                        help="Watermark bias parameter")
     args = parser.parse_args()
 
 
@@ -117,9 +101,50 @@ def main():
     # LOAD MODEL
     # ---------------------------------------------------------------
     print("\nLoading model:", model_name)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+
+    # ---- 0. Auto-correct llama model names ----
+    llama_aliases = ["llama", "llama3", "llama3.1", "llama3.1b", "llama-3", "llama-3.1"]
+
+    def is_llama(name):
+        n = name.lower()
+        return any(alias in n for alias in llama_aliases) or "meta-llama" in n
+
+    if is_llama(model_name):
+        print("Detected LLaMA-like model name. Using official HF model id:")
+        model_name = "meta-llama/Llama-3.1-8B-Instruct"
+        print(" → Corrected model name:", model_name)
+    else:
+        print("Using model name as provided.")
+
+    # ---- 1. Load tokenizer ----
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        token=True
+    )
+
+    # Fix missing pad token for LLaMA
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+
+    # ---- 2. Load model ----
+    model_is_llama = "meta-llama" in model_name.lower()
+
+    if model_is_llama:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            dtype=torch.float16,
+            device_map="auto",
+            token=True
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            dtype=torch.float32
+        )
+
     model.eval()
+    print("Model loaded successfully.")
 
     # ---------------------------------------------------------------
     # LOAD DATASET
@@ -157,6 +182,7 @@ def main():
             seg_count=args.seg,   
             tokenizer=tokenizer,
             model=model,
+            model_name=model_name,
             secret_key=secret_key,
             k=k,
             N=N,
@@ -165,14 +191,15 @@ def main():
             k_rs=k_rs,
             edit_prob=args.edit,     
             dataset=args.dataset,
-            essay_dataset=essay_dataset       
+            essay_dataset=essay_dataset,
+            bias=args.bias     
         )
 
         successes += int(result["success"])
         all_results.append(result)
 
     
-        # ---------------------------------------------------------------
+    # ---------------------------------------------------------------
     # SAVE JSON RESULTS
     # ---------------------------------------------------------------
     os.makedirs("results", exist_ok=True)
@@ -184,7 +211,7 @@ def main():
             "n": int(n),
             "k_rs": int(k_rs),
             "parity": int(parity),
-            "t_correctable": int(t),
+            "t_correctable": int(t)
         },
         "payload_bits": int(BITSTREAM_LEN),
         "successes": int(successes),
@@ -192,23 +219,59 @@ def main():
         "per_run": []
     }
 
+    # ---------------------------
+    # Global average bit accuracy
+    # ---------------------------
+    avg_bit_accuracy = np.mean([
+        sum(int(a == b) for a, b in zip(r["bitstream"], r["decoded_bits"])) / BITSTREAM_LEN
+        for r in all_results
+    ])
+
+    output["bit_accuracy"] = float(avg_bit_accuracy)
+
+    # ---------------------------
+    # Per-run results
+    # ---------------------------
     for i, r in enumerate(all_results):
+
+        # per-run bit accuracy
+        correct_bits = sum(int(a == b) for a, b in zip(r["bitstream"], r["decoded_bits"]))
+        bit_acc = correct_bits / BITSTREAM_LEN
+
         output["per_run"].append({
-            "run": i+1,
+            "run": int(i + 1),
             "success": numpy_to_python(r["success"]),
-            "bitstream": [int(b) for b in r["bitstream"]],
-            "decoded_bits": [int(b) for b in r["decoded_bits"]],
+            "bit_accuracy": float(bit_acc),
+            "correct_bits": int(correct_bits),
+
+            "bitstream": r["bitstream"].tolist(),
+            "encoded_bits": r["encoded_bits"].tolist(),
+            "decoded_bits": r["decoded_bits"].tolist(),
+
+            # extracted bits is a string → convert safely
+            "extracted_bits": [int(x) for x in r["extracted_bits"]],
+
+            # segment stats converted to JSON-safe types
             "segment_stats": convert_segment_stats_for_json(r["segment_stats"]),
-            "generated_text": r["generated_text"][:200],
-            "edited_text": r["edited_text"][:200],
+
+            "prompt": r["prompt"],                            
+            "generated_text": r["generated_text"],           
+            "full_text": r["full_text"],                       
+            "edited_text": r["edited_text"][:200],         
         })
 
-
+    # ---------------------------
+    # Save JSON
+    # ---------------------------
     with open("results/results.json", "w") as f:
-        json.dump(output, f, indent=4)
+        json_str = json.dumps(output, indent=4)
+        # Compact arrays to single lines
+        json_str = compact_json_arrays(json_str)
+        f.write(json_str)
+
+    print("\nSaved results to results/results.json")
 
 
-    print("\nSaved results to Results/results.json")
 
 
 # =================================================================

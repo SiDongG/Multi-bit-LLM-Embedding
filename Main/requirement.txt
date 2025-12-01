@@ -1,0 +1,11 @@
+torch
+transformers
+datasets
+numpy
+matplotlib
+tqdm
+reedsolo
+accelerate
+sentencepiece
+protobuf
+tokenizers
