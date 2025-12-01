@@ -13,6 +13,7 @@ Preliminary Achievable Scheme for CS8803: MLS
 ## Installation
 ```bash
 git clone https://github.com/SiDongG/Multi-bit-LLM-Embedding
-cd Multi-bit-LLM-Embedding
+cd Multi-bit-LLM-Embedding/Main
 pip install -r requirements.txt
 
+## Run
