@@ -1,4 +1,4 @@
-# Robust Covert LLM Embedding
+# Robust Covert LLM Multi-bit Embedding
 
 Preliminary Achievable Scheme for CS8803: MLS
 
