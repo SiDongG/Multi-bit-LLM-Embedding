@@ -1,4 +1,4 @@
-# Covert LLM Embedding: A Resolvability Perspective
+# Robust Covert LLM Embedding
 
 Preliminary Achievable Scheme for CS8803: MLS
 
